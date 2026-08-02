@@ -1,0 +1,9 @@
+dist/
+node_modules/
+.data/
+.temp/
+.env
+.env.*
+artifacts/runs/
+coverage/
+*.log

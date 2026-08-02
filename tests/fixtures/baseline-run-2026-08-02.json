@@ -1,0 +1,219 @@
+{
+  "id": "3655f6bb-1e8a-4953-a470-5bad194d9495",
+  "startedAt": "2026-08-02T20:06:29.027Z",
+  "completedAt": "2026-08-02T20:06:38.436Z",
+  "dryRun": true,
+  "repositories": [
+    "hrwatts/gem-lasso",
+    "hrwatts/median-ci-power-ttest",
+    "hrwatts/ifsn-logreg-benchmarks",
+    "hrwatts/or-algos",
+    "hrwatts/digital-harmony-studies"
+  ],
+  "findings": [
+    {
+      "fingerprint": "hrwatts/gem-lasso::dependency-automation-missing",
+      "repository": "hrwatts/gem-lasso",
+      "title": "Dependency automation is not configured",
+      "code": "dependency_automation_missing",
+      "summary": "The repository does not expose Renovate or Dependabot configuration in the inspected paths.",
+      "risk": "R1",
+      "status": "advisory",
+      "evidence": [
+        "No `renovate.json` detected in the repository root.",
+        "No `.github/dependabot.yml` detected among the inspected files."
+      ],
+      "protected_paths_touched": [],
+      "tags": [
+        "dependencies",
+        "automation",
+        "metadata"
+      ],
+      "related_paths": [
+        "renovate.json",
+        ".github/dependabot.yml"
+      ],
+      "data": {
+        "archetype": "python-library"
+      }
+    },
+    {
+      "fingerprint": "hrwatts/gem-lasso::missing-local-policy",
+      "repository": "hrwatts/gem-lasso",
+      "title": "Repository-local steward policy is not present",
+      "code": "missing_repository_steward_policy",
+      "summary": "The repository does not yet publish a local repository-steward policy override file; central defaults will be used.",
+      "risk": "R0",
+      "status": "advisory",
+      "evidence": [
+        "No `.github/repository-steward.json` detected.",
+        "Central archetype defaults for python-library will apply."
+      ],
+      "protected_paths_touched": [],
+      "tags": [
+        "policy",
+        "inventory"
+      ],
+      "related_paths": [
+        ".github/repository-steward.json"
+      ],
+      "data": {
+        "archetype": "python-library"
+      }
+    },
+    {
+      "fingerprint": "hrwatts/median-ci-power-ttest::missing-ci-workflow",
+      "repository": "hrwatts/median-ci-power-ttest",
+      "title": "Expected CI workflow is not present",
+      "code": "missing_ci_workflow",
+      "summary": "The repository archetype expects a CI workflow, but the inspected path is missing.",
+      "risk": "R4",
+      "status": "advisory",
+      "evidence": [
+        "No `.github/workflows/ci.yml` found in inspected repository contents."
+      ],
+      "protected_paths_touched": [],
+      "tags": [
+        "ci",
+        "workflow",
+        "validation"
+      ],
+      "related_paths": [
+        ".github/workflows/ci.yml"
+      ],
+      "data": {
+        "archetype": "research-companion"
+      }
+    },
+    {
+      "fingerprint": "hrwatts/median-ci-power-ttest::missing-local-policy",
+      "repository": "hrwatts/median-ci-power-ttest",
+      "title": "Repository-local steward policy is not present",
+      "code": "missing_repository_steward_policy",
+      "summary": "The repository does not yet publish a local repository-steward policy override file; central defaults will be used.",
+      "risk": "R0",
+      "status": "advisory",
+      "evidence": [
+        "No `.github/repository-steward.json` detected.",
+        "Central archetype defaults for research-companion will apply."
+      ],
+      "protected_paths_touched": [],
+      "tags": [
+        "policy",
+        "inventory"
+      ],
+      "related_paths": [
+        ".github/repository-steward.json"
+      ],
+      "data": {
+        "archetype": "research-companion"
+      }
+    },
+    {
+      "fingerprint": "hrwatts/ifsn-logreg-benchmarks::python-support-mismatch::3.9",
+      "repository": "hrwatts/ifsn-logreg-benchmarks",
+      "title": "Documented Python support does not match inspected automation",
+      "code": "python_support_mismatch",
+      "summary": "The README and/or CI workflow does not clearly include the minimum Python version declared in project metadata.",
+      "risk": "R4",
+      "status": "advisory",
+      "evidence": [
+        "Detected minimum version from project metadata: 3.9.",
+        "README versions seen: none.",
+        "Workflow versions seen: 3.10, 3.11, 3.12."
+      ],
+      "protected_paths_touched": [],
+      "tags": [
+        "python",
+        "ci",
+        "documentation"
+      ],
+      "related_paths": [
+        "README.md",
+        "pyproject.toml",
+        ".github/workflows/ci.yml"
+      ],
+      "data": {
+        "pyprojectMinimum": "3.9",
+        "readmeVersions": [],
+        "workflowVersions": [
+          "3.10",
+          "3.11",
+          "3.12"
+        ]
+      }
+    },
+    {
+      "fingerprint": "hrwatts/ifsn-logreg-benchmarks::missing-local-policy",
+      "repository": "hrwatts/ifsn-logreg-benchmarks",
+      "title": "Repository-local steward policy is not present",
+      "code": "missing_repository_steward_policy",
+      "summary": "The repository does not yet publish a local repository-steward policy override file; central defaults will be used.",
+      "risk": "R0",
+      "status": "advisory",
+      "evidence": [
+        "No `.github/repository-steward.json` detected.",
+        "Central archetype defaults for benchmark-research will apply."
+      ],
+      "protected_paths_touched": [],
+      "tags": [
+        "policy",
+        "inventory"
+      ],
+      "related_paths": [
+        ".github/repository-steward.json"
+      ],
+      "data": {
+        "archetype": "benchmark-research"
+      }
+    },
+    {
+      "fingerprint": "hrwatts/or-algos::missing-local-policy",
+      "repository": "hrwatts/or-algos",
+      "title": "Repository-local steward policy is not present",
+      "code": "missing_repository_steward_policy",
+      "summary": "The repository does not yet publish a local repository-steward policy override file; central defaults will be used.",
+      "risk": "R0",
+      "status": "advisory",
+      "evidence": [
+        "No `.github/repository-steward.json` detected.",
+        "Central archetype defaults for algorithm-port will apply."
+      ],
+      "protected_paths_touched": [],
+      "tags": [
+        "policy",
+        "inventory"
+      ],
+      "related_paths": [
+        ".github/repository-steward.json"
+      ],
+      "data": {
+        "archetype": "algorithm-port"
+      }
+    },
+    {
+      "fingerprint": "hrwatts/digital-harmony-studies::missing-local-policy",
+      "repository": "hrwatts/digital-harmony-studies",
+      "title": "Repository-local steward policy is not present",
+      "code": "missing_repository_steward_policy",
+      "summary": "The repository does not yet publish a local repository-steward policy override file; central defaults will be used.",
+      "risk": "R0",
+      "status": "advisory",
+      "evidence": [
+        "No `.github/repository-steward.json` detected.",
+        "Central archetype defaults for creative-site will apply."
+      ],
+      "protected_paths_touched": [],
+      "tags": [
+        "policy",
+        "inventory"
+      ],
+      "related_paths": [
+        ".github/repository-steward.json"
+      ],
+      "data": {
+        "archetype": "creative-site"
+      }
+    }
+  ]
+}

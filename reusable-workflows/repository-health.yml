@@ -1,0 +1,13 @@
+name: Repository Health
+
+on:
+  workflow_call:
+
+jobs:
+  repository-health:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - run: echo "Repository health workflow placeholder"

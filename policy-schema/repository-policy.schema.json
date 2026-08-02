@@ -1,0 +1,149 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://repository-steward.dev/schemas/repository-policy.schema.json",
+  "title": "RepositoryStewardPolicy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "repository",
+    "review",
+    "attention",
+    "repairs",
+    "protected_paths",
+    "protected_change_classes",
+    "validation"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "repository": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "importance",
+        "language_profiles",
+        "scan_frequency",
+        "timezone"
+      ],
+      "properties": {
+        "importance": {
+          "type": "string",
+          "enum": [
+            "emphasized",
+            "normal"
+          ]
+        },
+        "language_profiles": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        },
+        "scan_frequency": {
+          "type": "string",
+          "enum": [
+            "twice_daily",
+            "daily",
+            "weekly"
+          ]
+        },
+        "timezone": {
+          "type": "string"
+        }
+      }
+    },
+    "review": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "reviewer",
+        "require_human_review",
+        "allow_native_github_review",
+        "dismiss_approval_on_new_commit"
+      ],
+      "properties": {
+        "reviewer": {
+          "type": "string"
+        },
+        "require_human_review": {
+          "type": "boolean"
+        },
+        "allow_native_github_review": {
+          "type": "boolean"
+        },
+        "allow_steward_review_console": {
+          "type": "boolean"
+        },
+        "dismiss_approval_on_new_commit": {
+          "type": "boolean"
+        }
+      }
+    },
+    "attention": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "minimum_days_between_low_risk_prs",
+        "maximum_open_maintenance_prs",
+        "group_compatible_changes"
+      ],
+      "properties": {
+        "minimum_days_between_low_risk_prs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "maximum_open_maintenance_prs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "group_compatible_changes": {
+          "type": "boolean"
+        }
+      }
+    },
+    "repairs": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": true
+      }
+    },
+    "protected_paths": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "protected_change_classes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "validation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "required"
+      ],
+      "properties": {
+        "required": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "optional": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

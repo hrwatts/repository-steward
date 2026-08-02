@@ -1,0 +1,13 @@
+name: Documentation
+
+on:
+  workflow_call:
+
+jobs:
+  documentation:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - run: echo "Documentation validation workflow placeholder"

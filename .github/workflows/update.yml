@@ -1,0 +1,54 @@
+name: Repository Steward Pilot Scan
+
+on:
+  schedule:
+    - cron: "17 14 * * *"
+    - cron: "43 22 * * *"
+  workflow_dispatch:
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run dry pilot inspection
+        id: inspect
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DASHBOARD_ISSUE_REPO: ${{ github.repository }}
+          DASHBOARD_ISSUE_NUMBER: ${{ vars.REPOSITORY_STEWARD_DASHBOARD_ISSUE_NUMBER }}
+          REPOSITORY_STEWARD_DRY_RUN: "true"
+          REPOSITORY_STEWARD_MUTATIONS_ENABLED: "false"
+          REPOSITORY_STEWARD_ARTIFACT_NAME: repository-steward-run
+        run: npm run inspect:pilot
+
+      - name: Read run metadata
+        id: runmeta
+        run: |
+          echo "run_id=$(cat artifacts/runs/latest-run-id.txt)" >> "$GITHUB_OUTPUT"
+
+      - name: Upload run artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: repository-steward-run-${{ steps.runmeta.outputs.run_id }}
+          path: artifacts/runs
+
+      - name: Sync dashboard issue
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DASHBOARD_ISSUE_REPO: ${{ github.repository }}
+          DASHBOARD_ISSUE_NUMBER: ${{ vars.REPOSITORY_STEWARD_DASHBOARD_ISSUE_NUMBER }}
+          REPOSITORY_STEWARD_SYNC_RUN_ID: ${{ steps.runmeta.outputs.run_id }}
+        run: npm run sync:dashboard

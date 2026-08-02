@@ -1,0 +1,88 @@
+{
+  "schema_version": 1,
+  "repository": {
+    "importance": "emphasized",
+    "language_profiles": [
+      "python"
+    ],
+    "scan_frequency": "twice_daily",
+    "timezone": "America/Chicago"
+  },
+  "review": {
+    "reviewer": "hrwatts",
+    "require_human_review": true,
+    "allow_native_github_review": true,
+    "allow_steward_review_console": false,
+    "dismiss_approval_on_new_commit": true
+  },
+  "attention": {
+    "minimum_days_between_low_risk_prs": 7,
+    "maximum_open_maintenance_prs": 1,
+    "group_compatible_changes": true
+  },
+  "repairs": {
+    "whitespace": {
+      "enabled": true,
+      "auto_propose": true
+    },
+    "formatting": {
+      "enabled": true,
+      "auto_propose": true,
+      "maximum_changed_lines": 100
+    },
+    "dependency_patch": {
+      "enabled": true,
+      "minimum_release_age_days": 7
+    },
+    "dependency_minor": {
+      "enabled": true,
+      "development_only": true
+    },
+    "dependency_major": {
+      "enabled": false
+    },
+    "generated_docs": {
+      "enabled": true
+    },
+    "external_link_repair": {
+      "enabled": true,
+      "failures_required": 3
+    }
+  },
+  "protected_paths": [
+    "results/**",
+    "benchmarks/baselines/**",
+    "data/**",
+    "models/**",
+    "manuscript/**",
+    "figures/**",
+    "migrations/**",
+    ".github/workflows/release*"
+  ],
+  "protected_change_classes": [
+    "numerical_baseline",
+    "expected_test_value",
+    "statistical_result",
+    "theorem_statement",
+    "scientific_claim",
+    "authentication",
+    "authorization",
+    "license_change",
+    "destructive_migration"
+  ],
+  "validation": {
+    "required": [
+      "clean_install",
+      "unit_tests",
+      "lint",
+      "docs",
+      "idempotence"
+    ],
+    "optional": [
+      "integration_tests",
+      "type_check",
+      "notebooks",
+      "security_scan"
+    ]
+  }
+}

@@ -1,0 +1,107 @@
+[
+  {
+    "name": "hrwatts/gem-lasso",
+    "archetype": "python-library",
+    "default_branch": "main",
+    "language_profiles": [
+      "python"
+    ],
+    "paths_of_interest": [
+      "README.md",
+      "pyproject.toml",
+      ".github/workflows/ci.yml",
+      ".github/dependabot.yml",
+      "renovate.json",
+      ".github/repository-steward.json"
+    ],
+    "policy_overrides": {
+      "protected_paths": [
+        "benchmarks/**",
+        "docs/provenance.md"
+      ]
+    }
+  },
+  {
+    "name": "hrwatts/median-ci-power-ttest",
+    "archetype": "research-companion",
+    "default_branch": "main",
+    "language_profiles": [
+      "python",
+      "tex"
+    ],
+    "paths_of_interest": [
+      "README.md",
+      "requirements.txt",
+      "build.ps1",
+      "paper/paper.tex",
+      ".github/workflows/ci.yml",
+      ".github/repository-steward.json"
+    ],
+    "policy_overrides": {
+      "protected_paths": [
+        "paper/**",
+        "results/**",
+        "figures/**"
+      ]
+    }
+  },
+  {
+    "name": "hrwatts/ifsn-logreg-benchmarks",
+    "archetype": "benchmark-research",
+    "default_branch": "main",
+    "language_profiles": [
+      "python"
+    ],
+    "paths_of_interest": [
+      "README.md",
+      "pyproject.toml",
+      "results/full/summary.csv",
+      "results/full/dataset_manifest.json",
+      ".github/workflows/ci.yml",
+      ".github/repository-steward.json"
+    ],
+    "policy_overrides": {
+      "protected_paths": [
+        "results/**",
+        "docs/research_note.md"
+      ]
+    }
+  },
+  {
+    "name": "hrwatts/or-algos",
+    "archetype": "algorithm-port",
+    "default_branch": "main",
+    "language_profiles": [
+      "python"
+    ],
+    "paths_of_interest": [
+      "README.md",
+      "pyproject.toml",
+      "docs/testing.md",
+      ".github/workflows/ci.yml",
+      ".github/repository-steward.json"
+    ]
+  },
+  {
+    "name": "hrwatts/digital-harmony-studies",
+    "archetype": "creative-site",
+    "default_branch": "main",
+    "language_profiles": [
+      "typescript"
+    ],
+    "paths_of_interest": [
+      "README.md",
+      "package.json",
+      "vite.config.ts",
+      ".github/workflows/ci.yml",
+      ".github/workflows/deploy-pages.yml",
+      ".github/repository-steward.json"
+    ],
+    "policy_overrides": {
+      "protected_paths": [
+        "docs/source-boundaries.md",
+        "docs/sketch-catalog.md"
+      ]
+    }
+  }
+]
