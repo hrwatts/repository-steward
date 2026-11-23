@@ -13,6 +13,6 @@ export function planRepair(findings: Finding[]): RepairPlan[] {
     eligible: false,
     mode: "none",
     rationale:
-      "v0.1 dry pilot does not create source-repository branches or pull requests; repair planning is advisory only.",
+      "Inspection-only releases do not create source-repository branches or pull requests; repair planning is advisory only.",
   }));
 }

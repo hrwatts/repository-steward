@@ -16,21 +16,23 @@ export function makeValidationCertificate(
 ): ValidationCertificate {
   return validationCertificateSchema.parse({
     schema_version: 1,
+    certificate_kind: "observation",
     repository,
     inspection_id: inspectionId,
     base_sha: null,
     head_sha: headSha,
     generator: {
       name: "repository-steward",
-      version: "0.1.0",
+      version: "0.2.0",
     },
     change: {
       class: finding.code,
       risk: finding.risk,
       reason: finding.summary,
-      changed_files: finding.related_paths,
+      changed_files: [],
       protected_files: finding.protected_paths_touched,
-      changed_test_files: finding.related_paths.filter((path) => path.includes("test")),
+      changed_test_files: [],
+      observed_files: finding.related_paths,
     },
     validation: {
       clean_install: "not_run",
@@ -40,7 +42,7 @@ export function makeValidationCertificate(
       idempotence: "not_run",
     },
     uncertainties: [
-      "v0.1 pilot records findings only and does not run source-repository mutation validation.",
+      "Inspection-only release records observations and does not run source-repository mutation validation.",
     ],
     eligible_for_minimal_review: false,
   });

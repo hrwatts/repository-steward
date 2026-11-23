@@ -1,0 +1,24 @@
+{
+  "name": "Repository Steward",
+  "url": "https://steward.example.com",
+  "hook_attributes": {
+    "url": "https://steward.example.com/api/github/webhooks",
+    "active": true
+  },
+  "redirect_url": "https://steward.example.com/github/setup",
+  "public": false,
+  "default_permissions": {
+    "contents": "read",
+    "issues": "write",
+    "metadata": "read",
+    "pull_requests": "read"
+  },
+  "default_events": [
+    "check_suite",
+    "github_app_authorization",
+    "installation",
+    "pull_request",
+    "pull_request_review",
+    "workflow_run"
+  ]
+}

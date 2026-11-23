@@ -11,17 +11,20 @@ type Environment = {
   githubPrivateKey: string | undefined;
   githubInstallationId: string | undefined;
   syncRunId: string | undefined;
+  allowAnonymousReadFallback: boolean;
 };
 
-async function main(): Promise<void> {
+export async function runDashboardSync(): Promise<void> {
   const env = readEnvironment();
   const store = createAuditStore(env.databaseUrl);
   await store.initialize();
+  try {
   const client = new OctokitGithubClient({
     ...(env.githubToken ? { token: env.githubToken } : {}),
     ...(env.githubAppId ? { appId: env.githubAppId } : {}),
     ...(env.githubPrivateKey ? { privateKey: env.githubPrivateKey } : {}),
     ...(env.githubInstallationId ? { installationId: env.githubInstallationId } : {}),
+    allowAnonymousReadFallback: env.allowAnonymousReadFallback,
   });
 
   await syncDashboardIssue(
@@ -33,6 +36,9 @@ async function main(): Promise<void> {
     },
     env.syncRunId,
   );
+  } finally {
+    await store.close?.();
+  }
 }
 
 function readEnvironment(): Environment {
@@ -53,7 +59,18 @@ function readEnvironment(): Environment {
     githubPrivateKey: normalizeOptional(process.env.GITHUB_PRIVATE_KEY),
     githubInstallationId: normalizeOptional(process.env.GITHUB_INSTALLATION_ID),
     syncRunId: normalizeOptional(process.env.REPOSITORY_STEWARD_SYNC_RUN_ID),
+    allowAnonymousReadFallback: parseBoolean(
+      process.env.REPOSITORY_STEWARD_ALLOW_ANONYMOUS_READ_FALLBACK,
+      false,
+    ),
   };
+}
+
+function parseBoolean(value: string | undefined, fallback: boolean): boolean {
+  if (value === undefined) {
+    return fallback;
+  }
+  return ["1", "true", "yes", "on"].includes(value.toLowerCase());
 }
 
 function normalizeRequired(value: string | undefined, name: string): string {
@@ -73,8 +90,16 @@ function normalizeOptional(value: string | undefined): string | undefined {
   return normalized.length > 0 ? normalized : undefined;
 }
 
-main().catch((error: unknown) => {
-  const message = error instanceof Error ? `${error.message}\n${error.stack ?? ""}` : String(error);
-  process.stderr.write(`${message}\n`);
-  process.exitCode = 1;
-});
+async function main(): Promise<void> {
+  await runDashboardSync();
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+  main().catch((error: unknown) => {
+    const message = error instanceof Error ? `${error.message}\n${error.stack ?? ""}` : String(error);
+    process.stderr.write(`${message}\n`);
+    process.exitCode = 1;
+  });
+}
+import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";

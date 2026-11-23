@@ -3,11 +3,34 @@ name: Repository Health
 on:
   workflow_call:
 
+permissions:
+  contents: read
+
 jobs:
   repository-health:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - run: echo "Repository health workflow placeholder"
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Reject unresolved merge markers
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git grep -n -E '^(<<<<<<< |>>>>>>> )' -- ':!*.lock'; then
+            echo 'Unresolved merge markers were found.' >&2
+            exit 1
+          fi
+
+      - name: Reject Git whitespace errors
+        shell: bash
+        run: |
+          set -euo pipefail
+          empty_tree="$(git hash-object -t tree /dev/null)"
+          if git rev-parse --verify HEAD^ >/dev/null 2>&1; then
+            git diff --check HEAD^..HEAD
+          else
+            git diff --check "$empty_tree" HEAD
+          fi

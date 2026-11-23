@@ -37,6 +37,7 @@ type GithubClientOptions = {
   privateKey?: string;
   installationId?: string;
   userAgent?: string;
+  allowAnonymousReadFallback?: boolean;
 };
 
 function decodeContent(content: string, encoding?: string): string {
@@ -49,16 +50,18 @@ function decodeContent(content: string, encoding?: string): string {
 export class OctokitGithubClient implements RepositoryStewardGithubClient {
   private readonly octokitPromise: Promise<Octokit>;
   private readonly anonymousOctokitPromise: Promise<Octokit>;
+  private readonly allowAnonymousReadFallback: boolean;
 
   public constructor(options: GithubClientOptions) {
     this.octokitPromise = createOctokit(options);
-    this.anonymousOctokitPromise = Promise.resolve(new Octokit({ userAgent: options.userAgent ?? "repository-steward/0.1.0" }));
+    this.anonymousOctokitPromise = Promise.resolve(new Octokit({ userAgent: options.userAgent ?? "repository-steward/0.2.0" }));
+    this.allowAnonymousReadFallback = options.allowAnonymousReadFallback ?? false;
   }
 
   public async getRepository(owner: string, repo: string): Promise<GithubRepositoryDetails> {
     return this.withReadFallback(async (octokit) => {
       const response = await octokit.rest.repos.get({ owner, repo });
-      const pulls = await octokit.rest.pulls.list({
+      const pulls = await octokit.paginate(octokit.rest.pulls.list, {
         owner,
         repo,
         state: "open",
@@ -72,7 +75,7 @@ export class OctokitGithubClient implements RepositoryStewardGithubClient {
         pushedAt: response.data.pushed_at,
         language: response.data.language,
         stargazerCount: response.data.stargazers_count,
-        openPullRequestCount: pulls.data.length,
+        openPullRequestCount: pulls.length,
         hasIssuesEnabled: response.data.has_issues,
       };
     });
@@ -134,12 +137,14 @@ export class OctokitGithubClient implements RepositoryStewardGithubClient {
   }
 
   public async updateIssueBody(target: DashboardIssueTarget, body: string): Promise<GithubIssueDetails> {
-    const octokit = await this.octokitPromise;
-    const response = await octokit.rest.issues.update({
-      owner: target.owner,
-      repo: target.repo,
-      issue_number: target.issueNumber,
-      body,
+    const response = await this.withRetries(async () => {
+      const octokit = await this.octokitPromise;
+      return octokit.rest.issues.update({
+        owner: target.owner,
+        repo: target.repo,
+        issue_number: target.issueNumber,
+        body,
+      });
     });
 
     return {
@@ -167,19 +172,36 @@ export class OctokitGithubClient implements RepositoryStewardGithubClient {
 
   private async withReadFallback<T>(operation: (octokit: Octokit) => Promise<T>): Promise<T> {
     try {
-      return await operation(await this.octokitPromise);
+      return await this.withRetries(async () => operation(await this.octokitPromise));
     } catch (error) {
-      if (!isBadCredentials(error)) {
+      if (!this.allowAnonymousReadFallback || !isBadCredentials(error)) {
         throw error;
       }
 
-      return operation(await this.anonymousOctokitPromise);
+      return this.withRetries(async () => operation(await this.anonymousOctokitPromise));
     }
+  }
+
+  private async withRetries<T>(operation: () => Promise<T>): Promise<T> {
+    let lastError: unknown;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        return await operation();
+      } catch (error) {
+        lastError = error;
+        if (!isRetryable(error) || attempt === 2) {
+          throw error;
+        }
+        await delay(retryDelayMilliseconds(error, attempt));
+      }
+    }
+
+    throw lastError;
   }
 }
 
 async function createOctokit(options: GithubClientOptions): Promise<Octokit> {
-  const userAgent = options.userAgent ?? "repository-steward/0.1.0";
+  const userAgent = options.userAgent ?? "repository-steward/0.2.0";
 
   if (options.appId && options.privateKey && options.installationId) {
     const app = new App({
@@ -215,4 +237,45 @@ function isBadCredentials(error: unknown): boolean {
   }
 
   return "status" in error && Number((error as { status?: number }).status) === 401;
+}
+
+function isRetryable(error: unknown): boolean {
+  const status = errorStatus(error);
+  const headers = errorHeaders(error);
+  const rateLimitedForbidden =
+    status === 403 &&
+    (headers?.["retry-after"] !== undefined || headers?.["x-ratelimit-remaining"] === "0");
+  return status === 429 || rateLimitedForbidden || (status !== null && status >= 500);
+}
+
+function retryDelayMilliseconds(error: unknown, attempt: number): number {
+  const headers = errorHeaders(error);
+  const retryAfter = Number(headers?.["retry-after"]);
+  if (Number.isFinite(retryAfter) && retryAfter >= 0) {
+    return Math.min(retryAfter * 1_000, 60_000);
+  }
+
+  const resetAt = Number(headers?.["x-ratelimit-reset"]);
+  if (Number.isFinite(resetAt) && resetAt > 0) {
+    return Math.min(Math.max(resetAt * 1_000 - Date.now(), 1_000), 60_000);
+  }
+
+  return 1_000 * 2 ** attempt;
+}
+
+function errorStatus(error: unknown): number | null {
+  return error instanceof Error && "status" in error
+    ? Number((error as Error & { status?: number }).status)
+    : null;
+}
+
+function errorHeaders(error: unknown): Record<string, string> | undefined {
+  if (!(error instanceof Error) || !("response" in error)) {
+    return undefined;
+  }
+  return (error as Error & { response?: { headers?: Record<string, string> } }).response?.headers;
+}
+
+async function delay(milliseconds: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, milliseconds));
 }

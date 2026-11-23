@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 
 import { test } from "../harness.js";
-import { detectMaintenanceDrift } from "../../packages/drift-detectors/src/index.js";
+import {
+  detectMaintenanceDrift,
+  requiredPathsForInspection,
+} from "../../packages/drift-detectors/src/index.js";
 import {
   repositoryPolicySchema,
   type RepositoryInventory,
@@ -60,4 +63,16 @@ test("detects missing dependency automation with versioned keys", () => {
   assert.ok(mismatchFinding);
   assert.equal(mismatchFinding.detector_id, "runtime-support");
   assert.ok(mismatchFinding.dedup_key.includes("runtime-support"));
+});
+
+test("detectors declare paths independently of inventory paths of interest", () => {
+  const paths = requiredPathsForInspection({
+    ...inventory,
+    paths_of_interest: ["README.md"],
+  });
+
+  assert.ok(paths.includes("renovate.json"));
+  assert.ok(paths.includes(".github/dependabot.yml"));
+  assert.ok(paths.includes(".github/repository-steward.json"));
+  assert.ok(paths.includes(".github/workflows/ci.yml"));
 });

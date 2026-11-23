@@ -1,0 +1,68 @@
+services:
+  postgres:
+    image: postgres:17-bookworm@sha256:837bed18782820fe967067cb5328b02b0d9992c1be9a37ee0c9c492cfc03af3b
+    environment:
+      POSTGRES_DB: repository_steward
+      POSTGRES_USER: repository_steward
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-repository_steward_local}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U repository_steward -d repository_steward"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    volumes:
+      - repository-steward-db:/var/lib/postgresql/data
+
+  daemon:
+    build:
+      context: .
+      dockerfile: deploy/app/Dockerfile
+    command: ["node", "dist/apps/daemon-runner/src/index.js"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://repository_steward:${POSTGRES_PASSWORD:-repository_steward_local}@postgres:5432/repository_steward
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      GITHUB_APP_ID: ${GITHUB_APP_ID:-}
+      GITHUB_PRIVATE_KEY: ${GITHUB_PRIVATE_KEY:-}
+      GITHUB_INSTALLATION_ID: ${GITHUB_INSTALLATION_ID:-}
+      DASHBOARD_ISSUE_REPO: ${DASHBOARD_ISSUE_REPO:-}
+      DASHBOARD_ISSUE_NUMBER: ${DASHBOARD_ISSUE_NUMBER:-}
+      REPOSITORY_STEWARD_ALLOW_ANONYMOUS_READ_FALLBACK: ${REPOSITORY_STEWARD_ALLOW_ANONYMOUS_READ_FALLBACK:-true}
+      REPOSITORY_STEWARD_MUTATIONS_ENABLED: "false"
+      REPOSITORY_STEWARD_SCAN_INTERVAL_MINUTES: ${REPOSITORY_STEWARD_SCAN_INTERVAL_MINUTES:-720}
+      HEALTH_PORT: "3001"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3001/healthz').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    ports:
+      - "3001:3001"
+    volumes:
+      - repository-steward-artifacts:/app/artifacts
+    restart: unless-stopped
+
+  probot:
+    profiles: ["webhook"]
+    build:
+      context: .
+      dockerfile: deploy/app/Dockerfile
+    environment:
+      GITHUB_APP_ID: ${GITHUB_APP_ID:-}
+      GITHUB_PRIVATE_KEY: ${GITHUB_PRIVATE_KEY:-}
+      GITHUB_WEBHOOK_SECRET: ${GITHUB_WEBHOOK_SECRET:-}
+      PORT: "3000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/healthz').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+
+volumes:
+  repository-steward-db:
+  repository-steward-artifacts:

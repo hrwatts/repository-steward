@@ -25,12 +25,24 @@ async function main(): Promise<void> {
 
   const middleware = await createNodeMiddleware(registerRepositoryStewardApp, { probot });
   const server = createServer((request, response) => {
+    const path = new URL(request.url ?? "/", "http://localhost").pathname;
+    if (path === "/healthz" || path === "/readyz") {
+      response.statusCode = 200;
+      response.setHeader("content-type", "application/json");
+      response.end(JSON.stringify({ status: "ok", service: "repository-steward-probot" }));
+      return;
+    }
     void middleware(request, response, () => {
       response.statusCode = 404;
       response.end("Not Found");
     });
   });
   server.listen(port);
+  const shutdown = (): void => {
+    server.close();
+  };
+  process.once("SIGINT", shutdown);
+  process.once("SIGTERM", shutdown);
   process.stdout.write(`repository-steward probot server listening on port ${port}\n`);
 }
 

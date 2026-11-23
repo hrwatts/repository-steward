@@ -26,6 +26,7 @@ export interface DetectorExecutionResult {
 type DetectorDefinition = {
   detectorId: string;
   detectorVersion: string;
+  requiredPaths: (inventory: RepositoryInventory) => string[];
   run: (context: DetectorContext, metadata: DetectorMetadata) => Finding[];
 };
 
@@ -37,22 +38,32 @@ type DetectorMetadata = {
 const detectors: DetectorDefinition[] = [
   {
     detectorId: "dependency-automation",
-    detectorVersion: "1",
+    detectorVersion: "2",
+    requiredPaths: () => ["renovate.json", ".github/dependabot.yml"],
     run: detectMissingDependencyAutomation,
   },
   {
     detectorId: "runtime-support",
     detectorVersion: "1",
+    requiredPaths: (inventory) =>
+      inventory.language_profiles.includes("python")
+        ? ["README.md", "pyproject.toml", ".github/workflows/ci.yml"]
+        : [],
     run: detectPythonSupportMismatch,
   },
   {
     detectorId: "workflow-presence",
     detectorVersion: "1",
+    requiredPaths: (inventory) =>
+      inventory.archetype === "creative-site"
+        ? [".github/workflows/deploy-pages.yml"]
+        : [".github/workflows/ci.yml"],
     run: detectMissingExpectedWorkflow,
   },
   {
     detectorId: "policy-presence",
     detectorVersion: "1",
+    requiredPaths: () => [".github/repository-steward.json"],
     run: detectMissingRepositoryStewardPolicy,
   },
 ];
@@ -61,6 +72,10 @@ export const detectorCatalog = detectors.map((detector) => ({
   detectorId: detector.detectorId,
   detectorVersion: detector.detectorVersion,
 }));
+
+export function requiredPathsForInspection(inventory: RepositoryInventory): string[] {
+  return [...new Set(detectors.flatMap((detector) => detector.requiredPaths(inventory)))].sort();
+}
 
 export function runMaintenanceDetectors(context: DetectorContext): DetectorExecutionResult[] {
   return detectors.map((detector) => {
@@ -94,8 +109,8 @@ function detectMissingDependencyAutomation(
   { inventory, snapshot }: DetectorContext,
   metadata: DetectorMetadata,
 ): Finding[] {
-  const hasRenovate = snapshot.contents["renovate.json"] !== null;
-  const hasDependabot = snapshot.contents[".github/dependabot.yml"] !== null;
+  const hasRenovate = fileIsPresent(snapshot, "renovate.json");
+  const hasDependabot = fileIsPresent(snapshot, ".github/dependabot.yml");
 
   if (hasRenovate || hasDependabot) {
     return [];
@@ -246,7 +261,7 @@ function detectMissingRepositoryStewardPolicy(
   { inventory, snapshot }: DetectorContext,
   metadata: DetectorMetadata,
 ): Finding[] {
-  if (snapshot.contents[".github/repository-steward.json"] !== null) {
+  if (fileIsPresent(snapshot, ".github/repository-steward.json")) {
     return [];
   }
 
@@ -333,4 +348,12 @@ function extractPythonVersions(text: string): Set<string> {
 function extractPyprojectMinimum(text: string): string | null {
   const match = text.match(/requires-python\s*=\s*["']>=\s*(3\.\d+)/i);
   return match?.[1] ?? null;
+}
+
+function fileIsPresent(snapshot: RepositorySnapshot, path: string): boolean {
+  if (!Object.prototype.hasOwnProperty.call(snapshot.contents, path)) {
+    throw new Error(`Detector prerequisite was not collected: ${path}`);
+  }
+
+  return typeof snapshot.contents[path] === "string";
 }

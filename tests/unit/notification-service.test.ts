@@ -301,19 +301,29 @@ test("filtered run cannot resolve findings", () => {
   assert.equal(ledger.consecutive_complete_absences, 0);
 });
 
-test("detector version change does not silently resolve old findings", () => {
+test("detector version change explicitly supersedes old findings", () => {
+  const replacement: FindingObservation = {
+    ...baseObservation,
+    finding_key: "sha256:key-2",
+    detector_version: "2",
+    run_id: "run-2",
+    observed_at: "2026-08-03T00:00:00.000Z",
+    certificate_digest: "digest-2",
+  };
   const next = finalizeLedgersForRun({
     existingLedgers: [baseLedger()],
     run: baseRun({ id: "run-2", completedAt: "2026-08-03T00:00:00.000Z" }),
-    observations: [],
+    observations: [replacement],
     manualFields: new Map(),
     detectorVersionById: new Map([["dependency-automation", "2"]]),
   });
 
-  const [ledger] = next;
+  const ledger = next.find((item) => item.finding_key === "sha256:key-1");
   assert.ok(ledger);
-  assert.equal(ledger.lifecycle_state, "open");
+  assert.equal(ledger.lifecycle_state, "superseded");
   assert.equal(ledger.consecutive_complete_absences, 0);
+  assert.equal(ledger.superseded_by_detector_version, "2");
+  assert.equal(ledger.superseded_by_finding_key, "sha256:key-2");
 });
 
 test("dashboard sync retry is idempotent after issue update but before ledger finalization", async () => {

@@ -1,61 +1,111 @@
-# repository-steward
+# Repository Steward
 
-`repository-steward` is a GitHub App centered maintenance system for a configured portfolio of repositories.
+Repository Steward is a safety-first maintenance control plane for a portfolio
+of GitHub repositories. It discovers maintenance drift, resolves layered
+policy, records reproducible evidence, and maintains a durable finding ledger
+without creating source-repository activity for its own sake.
 
-This repository currently implements the **v0.1 dry pilot**:
+The current release is an **inspection-only production foundation**. It can run
+continuously as a daemon, but source branches, commits, pull requests, reviews,
+and merges remain disabled until the pilot gate is explicitly approved.
 
-- central twice-daily inspections;
-- per-repository policy loading and classification;
-- versioned finding keys, deduplication, and notification suppression windows;
-- SQLite/PostgreSQL-backed audit persistence with immutable observations and a finding ledger;
-- managed-block dashboard issue synchronization;
-- workflow artifacts and validation certificate generation;
-- no source-repository maintenance PR creation yet.
+## Guarantees
 
-The initial pilot inventory targets:
+- detector prerequisites are collected independently of user inventory hints;
+- incomplete collection is never treated as evidence that a file is absent;
+- finding identifiers and detector versions are stable and explicit;
+- observations are immutable and lifecycle state is stored separately;
+- partial scans and detector-version changes cannot silently resolve findings;
+- protected paths raise findings to the advisory-only `R6` class;
+- dashboard retries are idempotent and preserve operator-owned text;
+- every run artifact bundle contains a SHA-256 manifest;
+- `REPOSITORY_STEWARD_MUTATIONS_ENABLED` defaults to `false` and the operator
+  doctor rejects an enabled mutation path.
 
-- `hrwatts/gem-lasso`
-- `hrwatts/median-ci-power-ttest`
-- `hrwatts/ifsn-logreg-benchmarks`
-- `hrwatts/or-algos`
-- `hrwatts/digital-harmony-studies`
+See [the risk model](docs/risk-model.md) and [architecture](docs/architecture.md).
+
+## Quick start
+
+### Local Node.js
+
+Requirements: Node.js 22 or newer.
+
+```bash
+npm ci
+npm run check
+npm run steward -- doctor
+npm run inspect:pilot
+```
+
+For unauthenticated inspection of public repositories, explicitly set:
+
+```bash
+REPOSITORY_STEWARD_ALLOW_ANONYMOUS_READ_FALLBACK=true
+```
+
+Anonymous fallback is opt-in outside the supplied local Compose example.
+
+### Turnkey container deployment
+
+```bash
+cp .env.example .env
+docker compose up --build
+```
+
+This starts PostgreSQL and the scheduler daemon. The daemon scans immediately,
+then repeats every `REPOSITORY_STEWARD_SCAN_INTERVAL_MINUTES` (720 by default).
+It exposes health state at `http://localhost:3001/healthz`.
+
+To also receive GitHub App webhooks:
+
+```bash
+docker compose --profile webhook up --build
+```
+
+Populate the GitHub App variables first. See [deployment](docs/deployment.md)
+and the [manifest template](deploy/github-app-manifest.example.json).
 
 ## Commands
 
-```bash
-npm install
-npm run inspect:pilot
-npm run sync:dashboard
-npm run check
-```
+| Command | Purpose |
+| --- | --- |
+| `npm run steward -- doctor` | Validate mutation gate, inventory, storage, credentials, and GitHub reads |
+| `npm run steward -- scan` | Run one inspection |
+| `npm run steward -- sync` | Synchronize the oldest pending run to the dashboard |
+| `npm run steward -- pilot-report` | Summarize reviewed precision, safety, lifecycle, risk, and effort evidence |
+| `npm run start:daemon` | Run the durable scheduled inspection process |
+| `npm run start:probot` | Run the GitHub App webhook receiver |
+| `npm run check` | Type-check and run the test suite |
 
-## Environment
+## Configuration
 
-Important environment variables:
+The pilot inventory is [examples/hrwatts/repositories.json](examples/hrwatts/repositories.json).
+The centrally managed policy is
+[policy-schema/defaults/hrwatts-default-policy.json](policy-schema/defaults/hrwatts-default-policy.json).
+Repository-local files use the partial
+[override schema](policy-schema/repository-policy.override.schema.json).
 
-- `DATABASE_URL`
-  - unset or `sqlite:///...` -> SQLite audit store
-  - `postgres://...` -> PostgreSQL audit store
-- `GITHUB_TOKEN`
-  - optional token for higher GitHub API rate limits and dashboard issue writes
-- `DASHBOARD_ISSUE_REPO`
-  - repository in `owner/name` form for the maintenance dashboard issue
-- `DASHBOARD_ISSUE_NUMBER`
-  - issue number to update
-- `REPOSITORY_STEWARD_ARTIFACT_NAME`
-  - artifact bundle name recorded with finding observations
-- `REPOSITORY_STEWARD_SYNC_RUN_ID`
-  - optional explicit inspection run ID for dashboard sync retries
-- `REPOSITORY_STEWARD_MUTATIONS_ENABLED`
-  - `false` by default in v0.1
+Important environment variables are documented in [.env.example](.env.example).
+Prefer GitHub App installation credentials in deployed environments. A token is
+acceptable for local reads and steward-dashboard writes, but invalid credentials
+fail closed unless anonymous fallback is explicitly enabled.
 
-## Layout
+## Evidence
 
-The repository follows the implementation structure described in the project plan:
+Each run writes:
 
-- [apps/probot-server](apps/probot-server/src/server.ts)
-- [apps/scheduler-runner](apps/scheduler-runner/src/index.ts)
-- [packages](packages)
-- [policy-schema](policy-schema)
-- [examples/hrwatts](examples/hrwatts/repositories.json)
-- [docs](docs)
+- `run.json`, `coverage.json`, and `summary.md`;
+- normalized finding observations;
+- observation certificates and their digests;
+- `risk-summary.json`;
+- `artifact-manifest.json` with the byte length and SHA-256 of every evidence file.
+
+PostgreSQL is the production state store. SQLite remains available for local
+development and one-shot scans.
+
+## Safety boundary
+
+Repair planning remains advisory. The reusable validation workflows are not yet
+authorized as source-mutation gates, and the system does not create maintenance
+PRs. See [the threat model](docs/threat-model.md) and
+[production runbook](docs/operators/production-runbook.md).

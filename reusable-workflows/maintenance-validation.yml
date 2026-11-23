@@ -3,20 +3,52 @@ name: Maintenance Validation
 on:
   workflow_call:
     inputs:
-      python-version:
+      working-directory:
         required: false
         type: string
-        default: "3.12"
+        default: "."
+      clean-install-command:
+        required: true
+        type: string
+      validation-command:
+        required: true
+        type: string
+      regeneration-command:
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
 
 jobs:
   maintenance-validation:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          python-version: ${{ inputs.python-version }}
-      - name: Placeholder validation
-        run: echo "Reusable maintenance validation workflow placeholder"
+          persist-credentials: false
+
+      - name: Clean install
+        env:
+          VALIDATION_COMMAND: ${{ inputs.clean-install-command }}
+        run: bash -euo pipefail -c "$VALIDATION_COMMAND"
+
+      - name: Validate
+        env:
+          VALIDATION_COMMAND: ${{ inputs.validation-command }}
+        run: bash -euo pipefail -c "$VALIDATION_COMMAND"
+
+      - name: Regenerate deterministic outputs
+        if: inputs.regeneration-command != ''
+        env:
+          VALIDATION_COMMAND: ${{ inputs.regeneration-command }}
+        run: bash -euo pipefail -c "$VALIDATION_COMMAND"
+
+      - name: Verify idempotence and clean tree
+        shell: bash
+        run: git diff --exit-code -- .

@@ -16,6 +16,7 @@ export async function loadRepositoryInventory(path: string): Promise<RepositoryI
 export async function inspectRepositorySnapshot(
   client: RepositoryStewardGithubClient,
   inventory: RepositoryInventory,
+  requiredPaths: string[] = [],
 ): Promise<RepositorySnapshot> {
   const [owner, repo] = inventory.name.split("/");
   if (!owner || !repo) {
@@ -25,8 +26,9 @@ export async function inspectRepositorySnapshot(
   const repository = await client.getRepository(owner, repo);
   const headSha = await client.getDefaultBranchHeadSha(owner, repo, repository.defaultBranch);
 
+  const pathsToInspect = [...new Set([...inventory.paths_of_interest, ...requiredPaths])].sort();
   const contentsEntries = await Promise.all(
-    inventory.paths_of_interest.map(async (path) => {
+    pathsToInspect.map(async (path) => {
       const content = await client.getFileText(owner, repo, path, repository.defaultBranch);
       return [path, content] as const;
     }),

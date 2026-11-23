@@ -11,7 +11,7 @@ export function buildValidationDispatchPlan(policy: RepositoryPolicy): Validatio
     requiredChecks: policy.validation.required,
     optionalChecks: policy.validation.optional,
     notes: [
-      "v0.1 dry pilot does not dispatch repository-local reusable workflows automatically.",
+      "Inspection-only releases do not dispatch repository-local reusable workflows automatically.",
       "The returned check plan is recorded for evidence and future v0.2 mutation paths.",
     ],
   };

@@ -1,22 +1,36 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { randomUUID } from "node:crypto";
+import { pathToFileURL } from "node:url";
+import { createHash, randomUUID } from "node:crypto";
 
-import { createAuditStore, writeRunArtifacts, type InspectionBundle } from "../../../packages/audit-store/src/index.js";
-import { detectorCatalog, runMaintenanceDetectors } from "../../../packages/drift-detectors/src/index.js";
+import {
+  createAuditStore,
+  writeRunArtifacts,
+  type InspectionBundle,
+  type AdditionalRunArtifact,
+  type RepositorySnapshotManifest,
+} from "../../../packages/audit-store/src/index.js";
+import {
+  detectorCatalog,
+  requiredPathsForInspection,
+  runMaintenanceDetectors,
+} from "../../../packages/drift-detectors/src/index.js";
 import {
   certificateHash,
   makeValidationCertificate,
   renderRunMarkdown,
 } from "../../../packages/evidence-generator/src/index.js";
 import { OctokitGithubClient } from "../../../packages/github-client/src/index.js";
-import { resolveRepositoryPolicy } from "../../../packages/policy-engine/src/index.js";
+import {
+  matchesProtectedPath,
+  resolveRepositoryPolicy,
+} from "../../../packages/policy-engine/src/index.js";
 import { planRepair } from "../../../packages/repair-planner/src/index.js";
 import {
   inspectRepositorySnapshot,
   loadRepositoryInventory,
 } from "../../../packages/repository-discovery/src/index.js";
-import { summarizeRisk } from "../../../packages/risk-classifier/src/index.js";
+import { classifyFindingRisk, summarizeRisk } from "../../../packages/risk-classifier/src/index.js";
 import {
   defaultInspectionBudget,
   inspectionRunSchema,
@@ -42,19 +56,22 @@ type Environment = {
   artifactName: string | undefined;
   artifactRunUrl: string | undefined;
   artifactRetentionUntil: string | undefined;
+  allowAnonymousReadFallback: boolean;
 };
 
-async function main(): Promise<void> {
+export async function runInspection(): Promise<InspectionRun> {
   const env = readEnvironment();
   const clientOptions = {
     ...(env.githubToken ? { token: env.githubToken } : {}),
     ...(env.githubAppId ? { appId: env.githubAppId } : {}),
     ...(env.githubPrivateKey ? { privateKey: env.githubPrivateKey } : {}),
     ...(env.githubInstallationId ? { installationId: env.githubInstallationId } : {}),
+    allowAnonymousReadFallback: env.allowAnonymousReadFallback,
   };
   const client = new OctokitGithubClient(clientOptions);
   const store = createAuditStore(env.databaseUrl);
   await store.initialize();
+  try {
 
   const inventory = await loadRepositoryInventory(env.inventoryPath);
   const startedAt = new Date().toISOString();
@@ -62,13 +79,20 @@ async function main(): Promise<void> {
   const findings: Finding[] = [];
   const observations: FindingObservation[] = [];
   const certificates: InspectionBundle["certificates"] = [];
+  const snapshots: RepositorySnapshotManifest[] = [];
+  const additionalArtifacts: AdditionalRunArtifact[] = [];
   const coverage = [];
 
   for (const repository of inventory) {
     const detectorsExpected = detectorCatalog.map((detector) => detector.detectorId);
 
     try {
-      const snapshot = await inspectRepositorySnapshot(client, repository);
+      const snapshot = await inspectRepositorySnapshot(
+        client,
+        repository,
+        requiredPathsForInspection(repository),
+      );
+      snapshots.push(makeSnapshotManifest(snapshot, startedAt));
       const localPolicyText = snapshot.contents[".github/repository-steward.json"] ?? null;
       const policy = await resolveRepositoryPolicy(repository, snapshot, localPolicyText);
       const detectorResults = runMaintenanceDetectors({
@@ -89,7 +113,23 @@ async function main(): Promise<void> {
         }),
       );
 
-      for (const finding of detectorResults.flatMap((result) => result.findings)) {
+      for (const detectedFinding of detectorResults.flatMap((result) => result.findings)) {
+        const enrichedFinding: Finding = {
+          ...detectedFinding,
+          source_urls: sourceUrlsForFinding(
+            repository.name,
+            snapshot.headSha,
+            detectedFinding.related_paths,
+            snapshot.contents,
+          ),
+          protected_paths_touched: detectedFinding.related_paths.filter((path) =>
+            matchesProtectedPath(policy, path),
+          ),
+        };
+        const finding: Finding = {
+          ...enrichedFinding,
+          risk: classifyFindingRisk(enrichedFinding),
+        };
         const duplicate = await store.recentlySeenFinding(
           finding.repository,
           finding.finding_key,
@@ -146,9 +186,10 @@ async function main(): Promise<void> {
 
       const repairPlans = planRepair(findings.filter((finding) => finding.repository === repository.name));
       if (repairPlans.length > 0) {
-        const planPath = resolve(env.outputRoot, inspectionId, sanitizeFileComponent(repository.name), "repair-plans.json");
-        await mkdir(resolve(planPath, ".."), { recursive: true });
-        await writeFile(planPath, JSON.stringify(repairPlans, null, 2));
+        additionalArtifacts.push({
+          relativePath: `${sanitizeFileComponent(repository.name)}/repair-plans.json`,
+          content: JSON.stringify(repairPlans, null, 2),
+        });
       }
     } catch (error) {
       coverage.push(
@@ -191,10 +232,15 @@ async function main(): Promise<void> {
       coverage,
     },
     summaryMarkdown,
-  );
-  await writeFile(
-    resolve(runOutputDirectory, "risk-summary.json"),
-    JSON.stringify(summarizeRisk(findings), null, 2),
+    certificates,
+    snapshots,
+    [
+      ...additionalArtifacts,
+      {
+        relativePath: "risk-summary.json",
+        content: JSON.stringify(summarizeRisk(findings), null, 2),
+      },
+    ],
   );
   await writeFile(resolve(env.outputRoot, "latest-run-id.txt"), inspectionId);
 
@@ -215,6 +261,10 @@ async function main(): Promise<void> {
   await store.recordInspectionBundle(bundle);
 
   process.stdout.write(`${summaryMarkdown}\n`);
+  return run;
+  } finally {
+    await store.close?.();
+  }
 }
 
 function readEnvironment(): Environment {
@@ -241,6 +291,10 @@ function readEnvironment(): Environment {
     artifactName: normalizeOptional(process.env.REPOSITORY_STEWARD_ARTIFACT_NAME),
     artifactRunUrl,
     artifactRetentionUntil: calculateArtifactRetention(process.env.GITHUB_RETENTION_DAYS),
+    allowAnonymousReadFallback: parseBoolean(
+      process.env.REPOSITORY_STEWARD_ALLOW_ANONYMOUS_READ_FALLBACK,
+      false,
+    ),
   };
 }
 
@@ -271,6 +325,50 @@ function sanitizeFileComponent(value: string): string {
   return value.replace(/[^A-Za-z0-9._-]+/g, "-");
 }
 
+function sourceUrlsForFinding(
+  repository: string,
+  headSha: string | null,
+  paths: string[],
+  contents: Record<string, string | null>,
+): string[] {
+  if (!headSha) {
+    return [];
+  }
+
+  const urls = [`https://github.com/${repository}/tree/${headSha}`];
+  for (const path of paths.filter((candidate) => typeof contents[candidate] === "string")) {
+    const encodedPath = path.split("/").map(encodeURIComponent).join("/");
+    urls.push(`https://github.com/${repository}/blob/${headSha}/${encodedPath}`);
+  }
+  return urls;
+}
+
+function makeSnapshotManifest(
+  snapshot: {
+    repository: string;
+    headSha: string | null;
+    defaultBranch: string;
+    contents: Record<string, string | null>;
+  },
+  collectedAt: string,
+): RepositorySnapshotManifest {
+  return {
+    schema_version: 1,
+    repository: snapshot.repository,
+    head_sha: snapshot.headSha,
+    default_branch: snapshot.defaultBranch,
+    collected_at: collectedAt,
+    files: Object.entries(snapshot.contents)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([path, content]) => ({
+        path,
+        state: content === null ? "absent" : "present",
+        sha256: content === null ? null : createHash("sha256").update(content).digest("hex"),
+        bytes: content === null ? null : Buffer.byteLength(content),
+      })),
+  };
+}
+
 function normalizeOptional(value: string | undefined): string | undefined {
   if (value === undefined) {
     return undefined;
@@ -299,8 +397,14 @@ function makePendingSyncMetadata(
   };
 }
 
-main().catch((error: unknown) => {
-  const message = error instanceof Error ? `${error.message}\n${error.stack ?? ""}` : String(error);
-  process.stderr.write(`${message}\n`);
-  process.exitCode = 1;
-});
+async function main(): Promise<void> {
+  await runInspection();
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+  main().catch((error: unknown) => {
+    const message = error instanceof Error ? `${error.message}\n${error.stack ?? ""}` : String(error);
+    process.stderr.write(`${message}\n`);
+    process.exitCode = 1;
+  });
+}

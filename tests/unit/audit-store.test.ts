@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import { test } from "../harness.js";
-import { SqliteAuditStore } from "../../packages/audit-store/src/index.js";
+import { SqliteAuditStore, writeRunArtifacts } from "../../packages/audit-store/src/index.js";
 import type { InspectionBundle } from "../../packages/audit-store/src/index.js";
 import type { FindingLedger } from "../../packages/shared-types/src/index.js";
 
@@ -184,4 +186,63 @@ test("baseline August 2, 2026 artifact set still contains eight observations wit
   assert.equal(counts.R0, 5);
   assert.equal(counts.R1, 1);
   assert.equal(counts.R4, 2);
+});
+
+test("run artifacts include a content-addressed manifest", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "repository-steward-artifacts-"));
+  try {
+    const run = {
+      id: "manifest-run",
+      startedAt: "2026-11-23T00:00:00.000Z",
+      completedAt: "2026-11-23T00:00:01.000Z",
+      dryRun: true,
+      repositories: ["owner/repo"],
+      findings: [],
+      coverage: [
+        {
+          repository: "owner/repo",
+          detectors_expected: [],
+          detectors_completed: [],
+          detectors_failed: [],
+          collection_complete: true,
+          filtered: false,
+          head_sha: "abc123",
+        },
+      ],
+    };
+    await writeRunArtifacts(
+      directory,
+      { run, observations: [], coverage: run.coverage },
+      "# Summary",
+      [],
+      [
+        {
+          schema_version: 1,
+          repository: "owner/repo",
+          head_sha: "abc123",
+          default_branch: "main",
+          collected_at: "2026-11-23T00:00:00.000Z",
+          files: [
+            {
+              path: "README.md",
+              state: "present",
+              sha256: "a".repeat(64),
+              bytes: 10,
+            },
+          ],
+        },
+      ],
+    );
+
+    const manifest = JSON.parse(
+      await readFile(join(directory, "artifact-manifest.json"), "utf8"),
+    ) as { files: Array<{ path: string; sha256: string }> };
+    assert.deepEqual(
+      manifest.files.map((entry) => entry.path),
+      ["coverage.json", "run.json", "snapshots/owner-repo.json", "summary.md"],
+    );
+    assert.ok(manifest.files.every((entry) => /^[a-f0-9]{64}$/.test(entry.sha256)));
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });

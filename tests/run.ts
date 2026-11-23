@@ -2,6 +2,8 @@ import "./unit/audit-store.test.js";
 import "./unit/drift-detectors.test.js";
 import "./unit/notification-service.test.js";
 import "./unit/policy-engine.test.js";
+import "./unit/pilot-metrics.test.js";
+import "./unit/risk-classifier.test.js";
 
 import { runRegisteredTests } from "./harness.js";
 

@@ -3,11 +3,43 @@ name: Documentation
 on:
   workflow_call:
 
+permissions:
+  contents: read
+
 jobs:
   documentation:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - run: echo "Documentation validation workflow placeholder"
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+
+      - name: Check local Markdown links
+        shell: python
+        run: |
+          import pathlib
+          import re
+          import sys
+          from urllib.parse import unquote
+
+          failures = []
+          link_pattern = re.compile(r"(?<!!)\[[^]]*\]\(([^)]+)\)")
+          for document in pathlib.Path(".").rglob("*.md"):
+              if any(part in {".git", "node_modules"} for part in document.parts):
+                  continue
+              text = document.read_text(encoding="utf-8")
+              for target in link_pattern.findall(text):
+                  target = target.strip().split()[0].strip("<>")
+                  if not target or target.startswith(("#", "http://", "https://", "mailto:")):
+                      continue
+                  path = unquote(target.split("#", 1)[0])
+                  if path and not (document.parent / path).exists():
+                      failures.append(f"{document}: missing local link target {path}")
+
+          if failures:
+              print("\n".join(failures), file=sys.stderr)
+              raise SystemExit(1)

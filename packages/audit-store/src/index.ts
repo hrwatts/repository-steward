@@ -1,4 +1,5 @@
 import { mkdirSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
@@ -32,6 +33,25 @@ export interface InspectionBundle {
   syncMetadata?: SyncMetadata;
 }
 
+export interface RepositorySnapshotManifest {
+  schema_version: 1;
+  repository: string;
+  head_sha: string | null;
+  default_branch: string;
+  collected_at: string;
+  files: Array<{
+    path: string;
+    state: "present" | "absent";
+    sha256: string | null;
+    bytes: number | null;
+  }>;
+}
+
+export interface AdditionalRunArtifact {
+  relativePath: string;
+  content: string;
+}
+
 type PoolClientLike = {
   query: (text: string, values?: unknown[]) => Promise<unknown>;
   release: () => void;
@@ -57,6 +77,7 @@ export interface AuditStore {
       artifactRunUrl: string | null;
     }>
   >;
+  close?(): Promise<void>;
 }
 
 const SQLITE_SCHEMA = `
@@ -114,6 +135,14 @@ CREATE TABLE IF NOT EXISTS sync_runs (
   github_response_json TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS schema_migrations (
+  version INTEGER PRIMARY KEY,
+  applied_at TEXT NOT NULL
+);
+
+INSERT OR IGNORE INTO schema_migrations (version, applied_at)
+VALUES (1, CURRENT_TIMESTAMP);
 `;
 
 type SqlPrimitive = string | number | null;
@@ -133,6 +162,10 @@ export class SqliteAuditStore implements AuditStore {
   public async initialize(): Promise<void> {
     this.database.exec(SQLITE_SCHEMA);
     this.database.pragma("journal_mode = WAL");
+  }
+
+  public async close(): Promise<void> {
+    this.database.close();
   }
 
   public async recordInspectionBundle(bundle: InspectionBundle): Promise<void> {
@@ -449,7 +482,20 @@ export class PostgresAuditStore implements AuditStore {
         github_response_json JSONB NOT NULL,
         updated_at TEXT NOT NULL
       );
+
+      CREATE TABLE IF NOT EXISTS schema_migrations (
+        version INTEGER PRIMARY KEY,
+        applied_at TEXT NOT NULL
+      );
+
+      INSERT INTO schema_migrations (version, applied_at)
+      VALUES (1, CURRENT_TIMESTAMP)
+      ON CONFLICT (version) DO NOTHING;
     `);
+  }
+
+  public async close(): Promise<void> {
+    await this.pool.end();
   }
 
   public async recordInspectionBundle(bundle: InspectionBundle): Promise<void> {
@@ -793,18 +839,64 @@ export async function writeRunArtifacts(
   outputDirectory: string,
   payload: DashboardSyncPayload,
   summaryMarkdown: string,
+  certificates: InspectionBundle["certificates"] = [],
+  snapshots: RepositorySnapshotManifest[] = [],
+  additionalArtifacts: AdditionalRunArtifact[] = [],
 ): Promise<void> {
   const parsed = dashboardSyncPayloadSchema.parse(payload);
   mkdirSync(outputDirectory, { recursive: true });
   mkdirSync(join(outputDirectory, "findings"), { recursive: true });
-  await writeFile(join(outputDirectory, "run.json"), JSON.stringify(parsed.run, null, 2));
-  await writeFile(join(outputDirectory, "coverage.json"), JSON.stringify(parsed.coverage, null, 2));
-  await writeFile(join(outputDirectory, "summary.md"), summaryMarkdown);
+  mkdirSync(join(outputDirectory, "certificates"), { recursive: true });
+  mkdirSync(join(outputDirectory, "snapshots"), { recursive: true });
+  const manifestEntries: Array<{ path: string; sha256: string; bytes: number }> = [];
+
+  const writeArtifact = async (relativePath: string, content: string): Promise<void> => {
+    const absolutePath = join(outputDirectory, relativePath);
+    mkdirSync(dirname(absolutePath), { recursive: true });
+    await writeFile(absolutePath, content);
+    manifestEntries.push({
+      path: relativePath.replace(/\\/g, "/"),
+      sha256: createHash("sha256").update(content).digest("hex"),
+      bytes: Buffer.byteLength(content),
+    });
+  };
+
+  await writeArtifact("run.json", JSON.stringify(parsed.run, null, 2));
+  await writeArtifact("coverage.json", JSON.stringify(parsed.coverage, null, 2));
+  await writeArtifact("summary.md", summaryMarkdown);
 
   for (const observation of parsed.observations) {
-    await writeFile(
-      join(outputDirectory, observation.artifact_relative_path),
-      JSON.stringify(observation, null, 2),
+    await writeArtifact(observation.artifact_relative_path, JSON.stringify(observation, null, 2));
+  }
+
+  for (const item of certificates) {
+    const certificate = validationCertificateSchema.parse(item.certificate);
+    const safeKey = item.findingKey.replace(/[^A-Za-z0-9._-]+/g, "-");
+    await writeArtifact(
+      `certificates/${safeKey}.json`,
+      JSON.stringify({ sha256: item.hash, certificate }, null, 2),
     );
   }
+
+  for (const snapshot of snapshots) {
+    const safeRepository = snapshot.repository.replace(/[^A-Za-z0-9._-]+/g, "-");
+    await writeArtifact(`snapshots/${safeRepository}.json`, JSON.stringify(snapshot, null, 2));
+  }
+
+  for (const artifact of additionalArtifacts) {
+    await writeArtifact(artifact.relativePath, artifact.content);
+  }
+
+  await writeFile(
+    join(outputDirectory, "artifact-manifest.json"),
+    JSON.stringify(
+      {
+        schema_version: 1,
+        inspection_id: parsed.run.id,
+        files: manifestEntries.sort((left, right) => left.path.localeCompare(right.path)),
+      },
+      null,
+      2,
+    ),
+  );
 }

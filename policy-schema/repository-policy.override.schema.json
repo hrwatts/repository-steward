@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://repository-steward.dev/schemas/repository-policy.override.schema.json",
+  "title": "RepositoryStewardPolicyOverride",
+  "description": "Repository-local partial overrides merged onto the centrally managed policy.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "type": "integer", "const": 1 },
+    "repository": { "$ref": "repository-policy.schema.json#/properties/repository" },
+    "review": { "$ref": "repository-policy.schema.json#/properties/review" },
+    "attention": { "$ref": "repository-policy.schema.json#/properties/attention" },
+    "repairs": { "$ref": "repository-policy.schema.json#/properties/repairs" },
+    "protected_paths": { "$ref": "repository-policy.schema.json#/properties/protected_paths" },
+    "protected_change_classes": { "$ref": "repository-policy.schema.json#/properties/protected_change_classes" },
+    "validation": { "$ref": "repository-policy.schema.json#/properties/validation" }
+  }
+}

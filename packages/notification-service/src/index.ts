@@ -131,6 +131,9 @@ export function finalizeLedgersForRun(input: {
   const suppressionWindowDays = input.suppressionWindowDays ?? defaultInspectionBudget.suppress_duplicate_findings_for_days;
   const ledgerMap = new Map(input.existingLedgers.map((ledger) => [ledger.finding_key, findingLedgerSchema.parse(ledger)]));
   const observationMap = new Map(input.observations.map((observation) => [observation.finding_key, observation]));
+  const observationByDedupKey = new Map(
+    input.observations.map((observation) => [observation.dedup_key, observation]),
+  );
   const coverageByRepository = new Map(input.run.coverage.map((coverage) => [coverage.repository, coverage]));
 
   for (const observation of input.observations) {
@@ -165,6 +168,9 @@ export function finalizeLedgersForRun(input: {
       last_seen_at: observation.observed_at,
       resolved_at: null,
       reopened_at: existing?.lifecycle_state === "resolved" ? observation.observed_at : existing?.reopened_at ?? null,
+      superseded_at: null,
+      superseded_by_detector_version: null,
+      superseded_by_finding_key: null,
       occurrence_count: (existing?.occurrence_count ?? 0) + 1,
       consecutive_complete_absences: 0,
       manual_classification:
@@ -197,13 +203,25 @@ export function finalizeLedgersForRun(input: {
     const currentDetectorVersion = input.detectorVersionById.get(ledger.detector_id);
     const hasDetectorVersionChange = currentDetectorVersion !== undefined && currentDetectorVersion !== ledger.detector_version;
 
+    if (hasDetectorVersionChange) {
+      const replacement = observationByDedupKey.get(ledger.dedup_key);
+      ledgerMap.set(ledger.finding_key, {
+        ...ledger,
+        lifecycle_state: "superseded",
+        superseded_at: ledger.superseded_at ?? input.run.completedAt,
+        superseded_by_detector_version: currentDetectorVersion ?? null,
+        superseded_by_finding_key: replacement?.finding_key ?? null,
+        last_successful_sync_run: input.run.id,
+      });
+      continue;
+    }
+
     if (
       !coverage ||
       !coverage.collection_complete ||
       coverage.filtered ||
       !coverage.detectors_completed.includes(ledger.detector_id) ||
-      coverage.detectors_failed.includes(ledger.detector_id) ||
-      hasDetectorVersionChange
+      coverage.detectors_failed.includes(ledger.detector_id)
     ) {
       continue;
     }
@@ -234,8 +252,8 @@ export function finalizeLedgersForRun(input: {
     const manual = input.manualFields.get(ledger.finding_key);
     if (manual) {
       const nextLifecycle =
-        ledger.lifecycle_state === "resolved"
-          ? "resolved"
+        ledger.lifecycle_state === "resolved" || ledger.lifecycle_state === "superseded"
+          ? ledger.lifecycle_state
           : manual.recommended_disposition === "suppress"
             ? "operator_suppressed"
             : "open";
@@ -270,11 +288,16 @@ export function buildDashboardProjection(
     .filter((ledger) => ledger.lifecycle_state === "resolved")
     .sort((left, right) => (right.resolved_at ?? "").localeCompare(left.resolved_at ?? ""))
     .slice(0, defaultDashboardLimits.recently_resolved_limit);
+  const superseded = ledgers
+    .filter((ledger) => ledger.lifecycle_state === "superseded")
+    .sort((left, right) => (right.superseded_at ?? "").localeCompare(left.superseded_at ?? ""))
+    .slice(0, defaultDashboardLimits.superseded_findings_limit);
 
   return {
     open,
     operator_suppressed: operatorSuppressed,
     resolved,
+    superseded,
     run_history: history.slice(0, defaultDashboardLimits.run_history_limit).map((item) => ({
       run_id: item.runId,
       completed_at: item.completedAt,
@@ -300,6 +323,9 @@ export function renderDashboardManagedBlock(projection: DashboardProjection): st
   lines.push("## Recently Resolved");
   lines.push("");
   appendLedgerSection(lines, projection.resolved, "No recently resolved findings.");
+  lines.push("## Superseded Detector Results");
+  lines.push("");
+  appendLedgerSection(lines, projection.superseded, "No superseded detector results.");
   lines.push("## Run History");
   lines.push("");
 
@@ -433,6 +459,11 @@ function appendLedgerSection(lines: string[], ledgers: FindingLedger[], emptyMes
     lines.push(`- Finding key: \`${ledger.finding_key}\``);
     lines.push(`- Dedup key: \`${ledger.dedup_key}\``);
     lines.push(`- Lifecycle: \`${ledger.lifecycle_state}\``);
+    if (ledger.lifecycle_state === "superseded") {
+      lines.push(`- Superseded at: ${ledger.superseded_at ?? "unknown"}`);
+      lines.push(`- Replacement detector version: \`${ledger.superseded_by_detector_version ?? "unknown"}\``);
+      lines.push(`- Replacement finding: \`${ledger.superseded_by_finding_key ?? "none"}\``);
+    }
     lines.push(
       `- Notification suppression: ${
         ledger.notification_suppressed_until ? `through ${ledger.notification_suppressed_until}` : "no"
@@ -495,5 +526,7 @@ function severityForLifecycle(state: LifecycleState): number {
       return 1;
     case "resolved":
       return 2;
+    case "superseded":
+      return 3;
   }
 }

@@ -14,7 +14,12 @@ export const findingStatusSchema = z.enum([
 ]);
 export type FindingStatus = z.infer<typeof findingStatusSchema>;
 
-export const lifecycleStateSchema = z.enum(["open", "operator_suppressed", "resolved"]);
+export const lifecycleStateSchema = z.enum([
+  "open",
+  "operator_suppressed",
+  "resolved",
+  "superseded",
+]);
 export type LifecycleState = z.infer<typeof lifecycleStateSchema>;
 
 export const manualClassificationSchema = z.enum([
@@ -186,6 +191,7 @@ export type InspectionRun = z.infer<typeof inspectionRunSchema>;
 
 export const validationCertificateSchema = z.object({
   schema_version: z.literal(1),
+  certificate_kind: z.enum(["observation", "validation"]).optional(),
   repository: z.string(),
   inspection_id: z.string(),
   base_sha: z.string().nullable(),
@@ -201,6 +207,7 @@ export const validationCertificateSchema = z.object({
     changed_files: z.array(z.string()),
     protected_files: z.array(z.string()),
     changed_test_files: z.array(z.string()),
+    observed_files: z.array(z.string()).optional(),
   }),
   validation: z.record(z.string(), z.enum(["passed", "failed", "skipped", "not_run"])),
   uncertainties: z.array(z.string()),
@@ -274,6 +281,9 @@ export const findingLedgerSchema = z.object({
   last_seen_at: z.string(),
   resolved_at: z.string().nullable(),
   reopened_at: z.string().nullable(),
+  superseded_at: z.string().nullable().optional(),
+  superseded_by_detector_version: z.string().nullable().optional(),
+  superseded_by_finding_key: z.string().nullable().optional(),
   occurrence_count: z.number().int().nonnegative(),
   consecutive_complete_absences: z.number().int().nonnegative(),
   manual_classification: manualClassificationSchema,
@@ -313,6 +323,7 @@ export const dashboardProjectionSchema = z.object({
   open: z.array(findingLedgerSchema),
   operator_suppressed: z.array(findingLedgerSchema),
   resolved: z.array(findingLedgerSchema),
+  superseded: z.array(findingLedgerSchema),
   run_history: z.array(
     z.object({
       run_id: z.string(),
@@ -350,6 +361,7 @@ export const defaultDashboardLimits = {
   open_findings_limit: 100,
   suppressed_findings_limit: 30,
   recently_resolved_limit: 30,
+  superseded_findings_limit: 30,
   run_history_limit: 28,
 };
 

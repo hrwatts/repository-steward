@@ -1,6 +1,6 @@
 {
   "name": "repository-steward",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "GitHub App centered repository maintenance pilot with central inspections, audit state, and bounded maintenance workflows.",
   "type": "module",
@@ -14,7 +14,11 @@
     "check": "npm run typecheck && npm run test",
     "inspect:pilot": "tsx apps/scheduler-runner/src/index.ts",
     "sync:dashboard": "tsx apps/dashboard-sync-runner/src/index.ts",
-    "start:probot": "tsx apps/probot-server/src/server.ts"
+    "start:probot": "tsx apps/probot-server/src/server.ts",
+    "start:daemon": "tsx apps/daemon-runner/src/index.ts",
+    "steward": "tsx apps/cli/src/index.ts",
+    "start:probot:prod": "node dist/apps/probot-server/src/server.js",
+    "start:daemon:prod": "node dist/apps/daemon-runner/src/index.js"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.1",
@@ -22,7 +26,7 @@
     "pg": "^8.22.0",
     "pino": "^10.3.1",
     "probot": "^14.3.2",
-    "zod": "^4.4.2"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/node": "^24.3.0",
